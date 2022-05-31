@@ -17,6 +17,8 @@ from panoramix.vm import VM
 from panoramix.whiles import make_whiles
 from panoramix.utils.helpers import C, rewrite_trace
 
+from typing import Union
+
 logger = logging.getLogger(__name__)
 
 
@@ -39,7 +41,7 @@ class TimeoutInterrupt(BaseException):
         return repr(self.value)
 
 
-def decompile_bytecode(code: str, only_func_name=None) -> Decompilation:
+def decompile_bytecode(code: str, only_func_name: Union[str, None]=None) -> Decompilation:
     loader = Loader()
     loader.load_binary(code)  # Code is actually hex.
     return _decompile_with_loader(loader, only_func_name)
@@ -155,7 +157,7 @@ def _decompile_with_loader(loader, only_func_name=None) -> Decompilation:
             if target > 1 and loader.lines[target][1] == "jumpdest":
                 target += 1
 
-            @timeout_decorator.timeout(60 * 3, timeout_exception=TimeoutInterrupt)
+            @timeout_decorator.timeout(60 * 30, timeout_exception=TimeoutInterrupt)
             def dec():
                 trace = VM(loader).run(target, stack=stack, timeout=60)
                 explain("Initial decompiled trace", trace[1:])

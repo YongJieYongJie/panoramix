@@ -1,13 +1,9 @@
-import json
 import logging
-import os
-import os.path
-import traceback
 
 from panoramix.matcher import match
+# from panoramix.vm import VM # Note: Disabled because circular import issues
 from panoramix.utils.helpers import (
     COLOR_GRAY,
-    ENDC,
     EasyCopy,
     colorize,
     find_f,
@@ -19,6 +15,8 @@ from panoramix.utils.helpers import (
 from panoramix.utils.opcode_dict import opcode_dict
 from panoramix.utils.signatures import get_func_name, make_abi
 from panoramix.utils.supplement import fetch_sig
+
+from typing import Dict, List, Tuple, Union
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +31,9 @@ LOADER_TIMEOUT = 60
 class Loader(EasyCopy):
     signatures = {}
 
-    lines = {}  # global, let's assume one loader for now
-    binary = []  # array of ints, each int represents a byte in the source file
+    instructions: Dict[int, Tuple[int, str, Union[int, str, None]]] = {}  # global, let's assume one loader for now
+    binary: List[int] = []  # array of ints, each int represents a byte in the source file
+    is_loaded: bool = False
 
     @staticmethod
     def find_sig(sig, add_color=False):
@@ -73,13 +72,13 @@ class Loader(EasyCopy):
         return res
 
     def __init__(self):
-        self.last_line = None
-        self.jump_dests = []
+        self.last_addr: int = -1
+        self.jump_dests: List[int] = []
         self.func_dests = {}  # func_name -> jumpdest
         self.hash_targets = {}  # hash -> (jumpdest, stack)
         self.func_list = []
 
-        self.binary = None
+        self.binary = []
 
     def load_addr(self, address):
         assert address.isalnum()
@@ -107,8 +106,8 @@ class Loader(EasyCopy):
 
         self.load_binary(code)
 
-    def run(self, vm):
-        assert self.binary is not None, "Did you run load_*() first?"
+    def run(self, vm: "VM"): # TODO: Adding type hints for this method
+        assert self.is_loaded, "Did you run load_*() first?"
 
         try:
             # decompiles the code, starting from location 0
@@ -157,13 +156,13 @@ class Loader(EasyCopy):
             fname = get_func_name(hash)
             self.func_list.append((hash, fname, target, stack))
 
-    def next_line(self, i):
-        i += 1
-        while i not in self.lines and self.last_line > i:
-            i += 1
+    def next_instruction(self, addr: int):
+        addr += 1
+        while addr not in self.instructions and self.last_addr > addr:
+            addr += 1
 
-        if i <= self.last_line:
-            return i
+        if addr <= self.last_addr:
+            return addr
         else:
             return None
 
@@ -189,10 +188,17 @@ class Loader(EasyCopy):
 
     def disasm(self):
         for line_no, op, param in self.parsed_lines:
-            yield f"{hex(line_no)}, {op}, {hex(param) if param is not None else ''}"
+            if param is None:
+                yield f"{hex(line_no)}, {op}, "
+            elif isinstance(param, int):
+                yield f"{hex(line_no)}, {op}, {hex(param)}"
+            # elif isinstance(param, str):
+            #     logger.warn(f"[!] param ({param}) is not supposed to be of "
+            #             "str type based on original code")
+            #     yield f"{hex(line_no)}, {op}, {param}"
 
-    def load_binary(self, source):
-        stack = []
+    def load_binary(self, source: str): # TODO: Currently adding type hint to this method
+        raw_bytes: list[int] = []
         self.binary = []
 
         if source[:2] == "0x":
@@ -201,53 +207,55 @@ class Loader(EasyCopy):
         while len(source[:2]) > 0:
             num = int("0x" + source[:2], 16)
             self.binary.append(num)
-            stack = [num] + stack
+            raw_bytes = [num] + raw_bytes
             source = source[2:]
 
-        line = 0
+        addr: int = 0
 
-        parsed_lines = []
+        parsed_lines: list[Tuple[int, str, Union[int, None]]] = []
 
-        while len(stack) > 0:
-            popped = stack.pop()
+        while len(raw_bytes) > 0:
+            curr_byte = raw_bytes.pop()
 
-            orig_line = line
+            orig_line = addr
 
-            if popped not in opcode_dict:
+            if curr_byte not in opcode_dict:
                 op = "UNKNOWN"
-                param = popped
+                param = curr_byte
 
             else:
                 param = None
-                op = opcode_dict[popped]
+                op = opcode_dict[curr_byte]
 
                 if op == "jumpdest":
-                    self.jump_dests.append(line)
+                    self.jump_dests.append(addr)
 
                 if op[:4] == "push":
                     num_words = int(op[4:])
 
                     param = 0
-                    for i in range(num_words):
+                    for _ in range(num_words):
                         try:
-                            param = param * 0x100 + stack.pop()
-                            line += 1
+                            param = param * 0x100 + raw_bytes.pop()
+                            addr += 1
                         except Exception:
                             break
 
             parsed_lines.append((orig_line, op, param))
-            line += 1
+            addr += 1
 
-        self.parsed_lines = parsed_lines
-        self.last_line = line
-        self.lines = {}
+        self.parsed_lines = parsed_lines # TODO: Rename to parsed instructions
+        self.last_addr = addr # TODO: Rename to last addr
+        self.instructions = {} # TODO: Rename to listing (like in Ghidra)
 
         for line_no, op, param in parsed_lines:
-            if op[:4] == "push" and param > 1000000000000000:
-                param = pretty_bignum(
-                    param
-                )  # convert big numbers into strings if possibble
-                # should be moved to prettify really
+            if op[:4] == "push":
+                assert param is not None
+                if param > 1_000_000_000_000_000:
+                    param = pretty_bignum(
+                        param
+                    )  # convert big numbers into strings if possibble
+                    # should be moved to prettify really
 
             if op[:3] == "dup":
                 param = int(op[3:])
@@ -257,6 +265,7 @@ class Loader(EasyCopy):
                 param = int(op[4:])
                 op = "swap"
 
-            self.lines[line_no] = (line_no, op, param)
+            self.instructions[line_no] = (line_no, op, param)
 
-        return self.lines
+        self.is_loaded = True
+        return self.instructions

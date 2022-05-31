@@ -28,7 +28,7 @@ coloredlogs.install(
     field_styles={"asctime": {"color": "white", "faint": True}},
 )
 
-addr_shortcuts = {
+addr_shortcuts: "dict[str, str]" = {
     # main contract for testing - most of the common edge cases here
     "kitties": "0x06012c8cf97BEaD5deAe237070F9587f8E7A266d",
     # the convoluted one people can't decompile
@@ -63,7 +63,7 @@ addr_shortcuts = {
 }
 
 
-def print_decompilation(this_addr):
+def print_decompilation(this_addr: str):
     if this_addr.lower() in addr_shortcuts:
         this_addr = addr_shortcuts[this_addr.lower()]
 

@@ -28,7 +28,17 @@ class CannotCompare(Exception):
 
 # copied from other modules, need to rework module structures
 # to avoid circular dependencies
-def mask_to_int(size, offset):
+def mask_to_int(size: int, offset: int) -> int:
+    """Returns an integer representing the mask.
+
+    Parameters
+    ----------
+    size : int
+        Number of consecutive ones in the mask
+    offset : int
+        Number of bits the mask is offset from the right.
+    """
+
     if offset < 0:
         size = size + offset
         if size < 1:
@@ -121,7 +131,7 @@ def add_ge_zero(exp):
     assert len(exp) > 2, exp
 
     exp = simplify(exp)
-    if type(exp) == int:
+    if isinstance(exp, int):
         return exp >= 0
 
     #    print(exp)
@@ -943,11 +953,11 @@ def _mask_op(exp, size=256, offset=0, shl=0, shr=0):
         # below heuristics handle all this, and deliver good results in practice
         # but may be incorrect in some unusual cases
 
-        if type(shl) == int and (shl > 0 and shl < 8):
+        if isinstance(shl, int) and (shl > 0 and shl < 8):
             pass
 
         elif (
-            type(shl) == int
+            isinstance(shl, int)
             and shl >= 8
             and size == 256
             and (new_exp := apply_mask_to_storage(exp, size - shl, offset, shl))
@@ -1005,7 +1015,7 @@ def apply_mask_to_storage(exp, size, offset, shl):
             return ("storage", size, shr, stor_idx)
 
 
-def apply_mask(val, size, offset=0, shl=0):
+def apply_mask(val, size, offset=0, shl=0) -> int:
     assert all_concrete(val, size, offset, shl)
 
     mask = mask_to_int(size, offset)

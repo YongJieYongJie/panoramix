@@ -2,6 +2,8 @@ import copy
 import builtins
 import logging
 
+from typing import Tuple
+
 logger = logging.getLogger(__name__)
 
 
@@ -72,7 +74,7 @@ def _match_helper(expression, pattern, match):
         raise NoMatch(expression, pattern)
 
 
-def match(expression, pattern):
+def match(expression: Tuple, pattern: Tuple):
     """Return whether the expression matched the pattern. If it did, return a Match object.
 
     >>> expr = (1, 2)

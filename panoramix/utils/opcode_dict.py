@@ -6,7 +6,9 @@
 
 """
 
-opcode_dict = {
+from typing import Dict
+
+opcode_dict: Dict[int, str] = {
     #
     # Stop and Arithmetic
     #

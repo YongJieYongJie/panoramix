@@ -6,6 +6,7 @@ import logging
 from copy import copy, deepcopy
 from pathlib import Path
 from appdirs import user_cache_dir
+from typing import Union
 
 COLOR_HEADER = "\033[95m"
 COLOR_BLUE = "\033[94m"
@@ -78,8 +79,9 @@ class C:
     green_back = "\033[42;1m\033[38;5;0m"
     blue_back = "\033[43;1m\033[38;5;0m"
 
-    def asm(s):
-        return "\033[38;5;33m" + s + C.endc
+    @classmethod
+    def asm(cls, s):
+        return "\033[38;5;33m" + s + cls.endc
 
     every = set(
         [header, blue, okgreen, warning, red, bold, underline, green, gray, endc]
@@ -419,8 +421,8 @@ def cleanup_mul_1(exp):
     return tuple(cleanup_mul_1(e) for e in exp)
 
 
-def pretty_bignum(num):
-    if type(num) != int:
+def pretty_bignum(num: Union[int, str]):
+    if isinstance(num, str):
         return num
 
     if num == 0x19457468657265756D205369676E6564204D6573736167653A0A333200000000:

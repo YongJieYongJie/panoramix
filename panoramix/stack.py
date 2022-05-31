@@ -7,6 +7,8 @@ from panoramix.core.masks import to_mask, to_neg_mask
 from panoramix.prettify import prettify
 from panoramix.utils.helpers import EasyCopy, opcode, to_exp2
 
+from typing import List, Tuple, Union
+
 logger = logging.getLogger(__name__)
 
 """
@@ -44,11 +46,11 @@ def fold_stacks(self, latter, depth):
 
 
 class Stack(EasyCopy):
-    def __init__(self, val=None):
-        if type(val) == tuple:
+    def __init__(self, val: Union[Tuple, List, None]=None):
+        if isinstance(val, tuple):
             val = list(val)
 
-        self.stack = val or []
+        self.stack: List[Union[int, str, Tuple]] = val or []
 
     def __str__(self):
         return (
@@ -111,15 +113,23 @@ class Stack(EasyCopy):
         for idx, el in vars.items():
             first[len(first) - idx] = el
 
-    def jump_dests(self, jump_dests):
+    def jump_dests(self, jump_dests) -> List[str]:
+        """
+        For each item in the stack, check if the item is `int` and either 
+        (1) in `jump_dest` or (2) in the range (2000, 5000); if so, convert to
+        string and append to result list.
+
+        YJ: What does this accomplish? Is the (2000, 5000) range somehow
+        related to previous support for labels (that was removed in v0.5.0?)
+        """
 
         res = []
 
         for el in self.stack:
             if (
-                type(el) == int
+                isinstance(el, int)
                 and el in jump_dests
-                or (type(el) == int and el > 2000 and el < 5000)
+                or (isinstance(el, int) and el > 2000 and el < 5000)
             ):
                 res.append(str(el))
 
@@ -195,7 +205,7 @@ class Stack(EasyCopy):
         stack = self.stack
 
         for i, s in enumerate(stack):
-            if type(stack[i]) == tuple:
+            if isinstance(s, tuple):
                 if s[0] == "lt" and type(s[1]) == int and type(s[2]) == int:
                     if s[1] < s[2]:
                         stack[i] = ("bool", 1)
@@ -209,19 +219,19 @@ class Stack(EasyCopy):
                         stack[i] = ("bool", 0)
 
                 elif (
-                    s[0] == "iszero" and opcode(s[1]) == "bool" and type(s[1][1]) == int
-                ):
+                        s[0] == "iszero" and opcode(s[1]) == "bool" and type(s[1][1]) == int
+                ): # E.g., ("iszero", ("bool", 1)) -> ("bool", 1-1)
                     stack[i] = ("bool", 1 - s[1][1])
 
-                elif stack[i][0] == "iszero" and opcode(stack[i][1]) == "iszero":
-                    if opcode(stack[i][1][1]) in (
-                        "iszero",
+                elif s[0] == "iszero" and opcode(s[1]) == "iszero":
+                    if opcode(s[1][1]) in (
+                        "iszero", # E.g., ("iszero", ("iszero", ("iszero", 1))) -> ("iszero", 1)
                         "eq",
                         "lt",
                         "gt",
                         "slt",
                         "sgt",
                     ):
-                        stack[i] = stack[i][1][1]
+                        stack[i] = s[1][1]
                     else:
-                        stack[i] = ("bool", stack[i][1][1])
+                        stack[i] = ("bool", s[1][1])
